@@ -8,11 +8,23 @@ product_file = '../data/products.csv'
 lineitems_file = '../data/line_items.csv'
 
 
+# converts the json into a dataframe - to be used to create individual dataframes for each database table
+def get_orders_df():
+    input_fields = ['id', 'total_price', 'created_at', 'currency_rate', ['customer', 'name'], ['customer', 'id'], ['customer', 'email']]
+    df_fields = {'id': 'order_id', 'customer.id': 'customer_id',
+                 'customer.name': 'customer_name', 'customer.email': 'customer_email'}
+    df = pd.json_normalize(json_orders, 'line_items', input_fields, record_prefix='line_item_')
+    df = df.rename(columns=df_fields)
+    return df
+
+
+# creating csvs for each table - orders, customers, line_items and products -
+# so that the copy_from method provided by psycopg2 can be used for inserts.
 def create_csvs(df):
-    df_line_items = df[['line_item_id', 'order_id', 'line_item_product_id']]
+    df_line_items = df[['line_item_id', 'order_id', 'line_item_product_id', 'line_item_price']]
     df_line_items.to_csv(lineitems_file, index=False, header=False)
 
-    df_products = df[['line_item_product_id', 'line_item_product_sku', 'line_item_product_name', 'line_item_price']]
+    df_products = df[['line_item_product_id', 'line_item_product_sku', 'line_item_product_name']]
     df_products = df_products.drop_duplicates(keep='first', inplace=False)
     df_products.to_csv(product_file, index=False, header=False)
 
@@ -25,6 +37,7 @@ def create_csvs(df):
     df_orders_db.to_csv(orders_file, index=False, header=False)
 
 
+# rows in csv are inserted into the corresponding table
 def insert_from_csv(file, tbl_name):
     conn = psycopg2.connect("host=localhost dbname=namaste user=postgres")
     cur = conn.cursor()
@@ -34,19 +47,11 @@ def insert_from_csv(file, tbl_name):
     conn.close()
 
 
-def get_orders_df():
-    input_fields = ['id', 'total_price', 'created_at', 'currency_rate', ['customer', 'name'], ['customer', 'id'], ['customer', 'email']]
-    df_fields = {'id': 'order_id', 'customer.id': 'customer_id',
-                 'customer.name': 'customer_name', 'customer.email': 'customer_email'}
-    df = pd.json_normalize(json_orders, 'line_items', input_fields, record_prefix='line_item_')
-    df = df.rename(columns=df_fields)
-    return df
-
-
-json_orders = get_orders()
-df_orders = get_orders_df()
-create_csvs(df_orders)
-insert_from_csv(customer_file, "customers")
-insert_from_csv(orders_file, "orders")
-insert_from_csv(product_file, "products")
-insert_from_csv(lineitems_file, "line_items")
+if __name__ == "__main__":
+    json_orders = get_orders()
+    df_orders = get_orders_df()
+    create_csvs(df_orders)
+    insert_from_csv(customer_file, "customers")
+    insert_from_csv(orders_file, "orders")
+    insert_from_csv(product_file, "products")
+    insert_from_csv(lineitems_file, "line_items")
